@@ -70,4 +70,4 @@ class VehicleDetails(models.Model):
         self.is_deleted = True
         self.save()
 
-
+    
