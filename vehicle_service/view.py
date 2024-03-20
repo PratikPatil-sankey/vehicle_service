@@ -9,16 +9,23 @@ from .serializers import (
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import JSONParser
 
+from vehicle_service import models
+from django.db.models import Q
+
+
 
 @csrf_exempt
 def create_vehicle_type(request):
     try:
         if request.method == 'POST':
-            vehicle_type = JSONParser().parse(request)
-            serializer = VehicleTypeSerializer(data=vehicle_type)
-            
+            vehicle_type_data = JSONParser().parse(request)
+            serializer = VehicleTypeSerializer(data=vehicle_type_data)
+
+            for field in serializer.fields.keys():
+                if serializer.fields[field].required and field not in vehicle_type_data:
+                    raise ValueError(f"Missing required field: {field}")
+
             if serializer.is_valid():
-                
                 serializer.save()
                 return JsonResponse({"message": "Vehicle type created successfully!!", "data": serializer.data}, status=201)
             else:
@@ -26,7 +33,7 @@ def create_vehicle_type(request):
         else:
             return JsonResponse({"message": "Invalid HTTP method"}, status=405)
     except Exception as error:
-        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=500)
+        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=400)
 
 
 @csrf_exempt
@@ -97,6 +104,11 @@ def create_emission_nom(request):
         if request.method == 'POST':
             emission_nom_data = json.loads(request.body)
             serializer = EmissionNomSerializer(data=emission_nom_data)
+            
+            for field in serializer.fields.keys():
+                if serializer.fields[field].required and field not in emission_nom_data:
+                    raise ValueError(f"Missing required field: {field}")
+
             if serializer.is_valid():
                 serializer.save()
                 return JsonResponse({"message": "Emission Nom created successfully!!", "data": serializer.data}, status=201)
@@ -173,6 +185,10 @@ def create_fuel(request):
             fuel_data = json.loads(request.body)
             serializer = FuelTypeSerializer(data=fuel_data)
             
+            for field in serializer.fields.keys():
+                if serializer.fields[field].required and field not in fuel_data:
+                    raise ValueError(f"Missing required field: {field}")
+
             if serializer.is_valid():
                 serializer.save()
                 return JsonResponse({"message": "Fuel type created successfully!!", "data": serializer.data}, status=201)
@@ -258,7 +274,8 @@ def create_vehicle(request):
             emission_nom = EmissionNom.objects.get(emission_nom_name=emission_nom_name)
             fuel_type = FuelTypes.objects.get(fuel_name=fuel_type_name)
             vehicle_type = VehicleTypes.objects.get(vehicle_name=vehicle_type_name)
-            # Add fetched objects to vehicle_data
+
+
             vehicle_data['vehicle_type'] = vehicle_type.vehicle_id
             vehicle_data['emission_nom'] = emission_nom.emission_nom_id
             vehicle_data['fuel_type'] = fuel_type.fuel_id
@@ -326,5 +343,87 @@ def get_all_vehicle_list(request):
         vehicles = VehicleDetails.objects.all()
         serializer = VehicleSerializer(vehicles, many=True)
         return JsonResponse(serializer.data, safe=False)
+    except Exception as error:
+        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=500)
+    
+#version
+@csrf_exempt
+def get_vehicle_by_id(request):
+    try:
+        user_obj = request.GET.get('user_id')  
+        if user_obj:
+            vehicle_objects = VehicleDetails.objects.filter(user_id=user_obj, is_deleted=False)
+            serializer = VehicleSerializer(vehicle_objects, many=True)
+            if serializer.data:
+                return JsonResponse({"message": f"Vehicle details for id {user_obj} retrieved successfully!!", "data": serializer.data})
+            else:
+                return JsonResponse({"message": f"No vehicle details found for date {user_obj}"})
+        else:
+            return JsonResponse({"message": "Invalid User format."}, status=400)
+    except Exception as error:
+        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=500)   
+    
+
+
+@csrf_exempt
+def get_vehicle_details_by_search_v1(request):
+    try:
+        search_text = request.GET.get('search_text', '')
+
+        vehicle_objects = VehicleDetails.objects.filter(
+            Q(vin_no__icontains=search_text) | Q(registration_no__icontains=search_text),
+            is_deleted=False
+        )
+
+        serializer = VehicleSerializer(vehicle_objects, many=True)
+
+        if serializer.data:
+            return JsonResponse({"message": f"Vehicle details matching search text '{search_text}' retrieved successfully!!", "data": serializer.data})
+        else:
+            return JsonResponse({"message": f"No vehicle details found matching search text '{search_text}'"})
+    except Exception as error:
+        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=500)
+    
+
+
+from django.core.paginator import Paginator
+
+    
+@csrf_exempt
+def get_vehicle_details_by_search_v2(request):
+    try:
+        search_text = request.GET.get('search_text', '')
+        page_number = request.GET.get('page', 1) 
+        sort_by = request.GET.get('sort_by', 'vehicle_id')  
+       
+        vehicle_objects = VehicleDetails.objects.filter(is_deleted=False)
+
+      
+        if search_text:
+            vehicle_objects = vehicle_objects.filter(
+                Q(vin_no__icontains=search_text) | Q(registration_no__icontains=search_text)
+            )
+
+
+        paginator = Paginator(vehicle_objects, 5)  
+        page = paginator.get_page(page_number)
+
+       
+        if sort_by in ['vehicle_id', 'vin_no', 'registration_no', 'created_at', 'updated_at']:
+            vehicle_objects = vehicle_objects.order_by(sort_by)
+
+        serializer = VehicleSerializer(page, many=True)
+
+        if serializer.data:
+            return JsonResponse({
+                "message": f"Vehicle details matching search text '{search_text}' retrieved successfully!!",
+                "data": serializer.data,
+                "total_pages": paginator.num_pages,
+                "current_page": page.number,
+                "has_next_page": page.has_next(),
+                "has_previous_page": page.has_previous(),
+            })
+        else:
+            return JsonResponse({"message": f"No vehicle details found matching search text '{search_text}'"})
     except Exception as error:
         return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=500)

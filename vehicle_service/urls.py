@@ -50,5 +50,9 @@ urlpatterns = [
     path('vehicle/update/<int:pk>/', view.update_vehicle, name='update_vehicle'),
     path('vehicle/delete/<int:pk>/', view.delete_vehicle, name='delete_vehicle'),
     path('vehicle/get_all', view.get_all_vehicle_list, name='get_all_vehicle_list'),
-
+    
+    path('api/vehicle_details/get_vehicle_by_id', view.get_vehicle_by_id, name='get_vehicle_by_id'),
+    path('api/vehicle_details/get_vehicle_details_by_search_v1/', view.get_vehicle_details_by_search_v1, name='get_vehicle_details_by_search_v1/'),
+    path('api/vehicle_details/get_vehicle_details_by_search_v2/', view.get_vehicle_details_by_search_v2, name='get_vehicle_details_by_search_v2/'),
+  
 ]
