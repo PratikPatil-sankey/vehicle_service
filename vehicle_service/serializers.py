@@ -3,10 +3,13 @@ from .models import VehicleTypes, EmissionNom, FuelTypes, VehicleDetails
 
 
 class VehicleTypeSerializer(serializers.ModelSerializer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['vehicle_name'].required = True 
+
     class Meta:
         model = VehicleTypes
-        fields = '__all__'
-
+        fields = ('vehicle_name',)
 
 class EmissionNomSerializer(serializers.ModelSerializer):
     class Meta:

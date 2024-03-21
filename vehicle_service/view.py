@@ -18,14 +18,11 @@ from django.db.models import Q
 def create_vehicle_type(request):
     try:
         if request.method == 'POST':
-            vehicle_type_data = JSONParser().parse(request)
-            serializer = VehicleTypeSerializer(data=vehicle_type_data)
-
-            for field in serializer.fields.keys():
-                if serializer.fields[field].required and field not in vehicle_type_data:
-                    raise ValueError(f"Missing required field: {field}")
-
+            vehicle_type = JSONParser().parse(request)
+            serializer = VehicleTypeSerializer(data=vehicle_type)
+            
             if serializer.is_valid():
+                
                 serializer.save()
                 return JsonResponse({"message": "Vehicle type created successfully!!", "data": serializer.data}, status=201)
             else:
@@ -33,8 +30,7 @@ def create_vehicle_type(request):
         else:
             return JsonResponse({"message": "Invalid HTTP method"}, status=405)
     except Exception as error:
-        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=400)
-
+        return JsonResponse({"message": "Something went wrong", "error": str(error)}, status=500)
 
 @csrf_exempt
 def get_all_vehicle_type_list(request):
@@ -388,29 +384,31 @@ def get_vehicle_details_by_search_v1(request):
 
 from django.core.paginator import Paginator
 
-    
+from django.db.models.functions import Lower
+
 @csrf_exempt
 def get_vehicle_details_by_search_v2(request):
     try:
         search_text = request.GET.get('search_text', '')
-        page_number = request.GET.get('page', 1) 
+     
         sort_by = request.GET.get('sort_by', 'vehicle_id')  
        
         vehicle_objects = VehicleDetails.objects.filter(is_deleted=False)
 
-      
-        if search_text:
+        if request.GET.get('search_text'):
             vehicle_objects = vehicle_objects.filter(
-                Q(vin_no__icontains=search_text) | Q(registration_no__icontains=search_text)
+                Q(vin_no__icontains=request.GET.get('search_text')) | Q(registration_no__icontains=request.GET.get('search_text'))
             )
 
+        if request.GET.get('page', 1) :
+            paginator = Paginator(vehicle_objects, 5)  
+            page = paginator.get_page(request.GET.get('page', 1))
 
-        paginator = Paginator(vehicle_objects, 5)  
-        page = paginator.get_page(page_number)
-
-       
-        if sort_by in ['vehicle_id', 'vin_no', 'registration_no', 'created_at', 'updated_at']:
-            vehicle_objects = vehicle_objects.order_by(sort_by)
+        if sort_by in [ 'vin_no', 'registration_no', 'created_at', 'updated_at']:
+            if sort_by in ['created_at', 'updated_at']:
+                vehicle_objects = vehicle_objects.order_by(Lower(sort_by).desc())
+            else:
+                vehicle_objects = vehicle_objects.order_by(lambda x: getattr(x, sort_by).desc())
 
         serializer = VehicleSerializer(page, many=True)
 
@@ -418,10 +416,10 @@ def get_vehicle_details_by_search_v2(request):
             return JsonResponse({
                 "message": f"Vehicle details matching search text '{search_text}' retrieved successfully!!",
                 "data": serializer.data,
-                "total_pages": paginator.num_pages,
-                "current_page": page.number,
-                "has_next_page": page.has_next(),
-                "has_previous_page": page.has_previous(),
+                "total_pages": paginator.num_pages if request.GET.get('page', 1) else 1,
+                "current_page": page.number if request.GET.get('page', 1) else 1,
+                "has_next_page": page.has_next() if request.GET.get('page', 1) else False,
+                "has_previous_page": page.has_previous() if request.GET.get('page', 1) else False,
             })
         else:
             return JsonResponse({"message": f"No vehicle details found matching search text '{search_text}'"})
